@@ -22,6 +22,7 @@ logger.setLevel(logging.INFO)
 
 DYNAMODB_NAME               = ""    if("DYNAMODB_NAME" not in os.environ)           else os.environ["DYNAMODB_NAME"]
 LOCOGUIDE_API_ADDRESS       = ""    if("LOCOGUIDE_API_ADDRESS" not in os.environ)   else os.environ["LOCOGUIDE_API_ADDRESS"]
+LOCOGUIDE_API_ADDRESS2       = ""   if("LOCOGUIDE_API_ADDRESS2" not in os.environ)  else os.environ["LOCOGUIDE_API_ADDRESS2"]
 LOCOGUIDE_API_TOKEN         = ""    if("LOCOGUIDE_API_TOKEN" not in os.environ)     else os.environ["LOCOGUIDE_API_TOKEN"]
 APIKEY_GOOGLE_MAP           = ""    if("APIKEY_GOOGLE_MAP" not in os.environ)       else os.environ["APIKEY_GOOGLE_MAP"]
 RESULT_COUNT_MAX            = 100
@@ -205,10 +206,12 @@ def getCrowdLvFromLoco(resultlist, locolist):
             ids += "{0},".format(item["locoguide_id"])
         ids.rstrip(",")
             
-        url = LOCOGUIDE_API_ADDRESS + "?id=" + ids
+        # url = LOCOGUIDE_API_ADDRESS + "?id=" + ids
+        url = LOCOGUIDE_API_ADDRESS2 + "?place_id=" + ids
+        
         idList = []
         lvList = []
-        has_clowd = requestLoco(url, 1, idList, lvList)
+        has_clowd = requestLoco2(url, 1, idList, lvList)
 
         for i in range(len(idList)):
             id = idList[i]
@@ -220,6 +223,50 @@ def getCrowdLvFromLoco(resultlist, locolist):
 
     except Exception as e:
         logger.exception(e)
+
+    return has_clowd
+
+
+def requestLoco2(url, page, idList, lvList):
+    logger.info("------loco address2------page=" + str(page))
+    logger.info(url)
+    headers ={}
+    headers["Authorization"] = "Bearer " + LOCOGUIDE_API_TOKEN
+    response = request(url, headers)
+    response.encoding = response.apparent_encoding
+    content = response.content.decode("utf-8")
+    jsn = json.loads(content)
+    
+    logger.info("list size = " + str(len(jsn)))
+    logger.info(jsn)
+
+    has_clowd = False
+    for tmp in jsn:
+        if "crowd_status" not in tmp or not tmp["crowd_status"]:
+            continue
+        color = tmp["crowd_status"]["color"]
+        
+        
+        if tmp["crowd_status"] != None:
+            color = tmp["crowd_status"]["color"]
+        lv = 0
+        if color == "red":
+            lv = 3
+        elif color == "yellow":
+            lv = 2
+        elif color == "green" or color == "blue":
+            lv = 1
+        lvList.append(lv)
+        idList.append(str(tmp["place_id"]))
+        has_clowd = True
+
+    if "Link" in response.headers:
+        nextUrl = response.headers["Link"]
+        nextUrl = nextUrl[1:nextUrl.find(">")]
+        page = page + 1
+        flg = requestLoco(nextUrl, page, idList, lvList)
+        if flg:
+            has_clowd = True
 
     return has_clowd
 
